@@ -40,13 +40,22 @@ export function initTextField(font, lineH) {
 }
 
 // Main render call — invoke once per animation frame.
-export function renderTextField(ctx, W, H, state) {
+// Can accept a single state or an array of states
+export function renderTextField(ctx, W, H, stateOrStates) {
   if (!_prepared) return
+
+  // Handle both single state and array of states
+  const states = Array.isArray(stateOrStates) ? stateOrStates : [stateOrStates]
 
   const charW     = _charW
   const lineH     = _lineH
   const rows      = Math.ceil(H / lineH)
-  const rowBounds = getRowBounds(state, lineH, H, AABB_PAD_X, AABB_PAD_Y, W, H)
+
+  // Get bounds from all organisms (keep separate, not merged)
+  const allRowBounds = []
+  for (const state of states) {
+    allRowBounds.push(getRowBounds(state, lineH, H, AABB_PAD_X, AABB_PAD_Y, W, H))
+  }
 
   // ── Pass 1: background text (dim), flowing around organism outline ─────────
   ctx.font      = _font
@@ -62,10 +71,16 @@ export function renderTextField(ctx, W, H, state) {
     // Baseline position (~85% down the line cell)
     const baseline = rowTop + lineH * 0.82
 
-    const org = rowBounds[row]
+    // Collect all organism bounds for this row
+    const orgBoundsForRow = []
+    for (const rowBounds of allRowBounds) {
+      if (rowBounds[row]) {
+        orgBoundsForRow.push(rowBounds[row])
+      }
+    }
 
-    if (!org) {
-      // Full-width line
+    if (orgBoundsForRow.length === 0) {
+      // No organisms on this row - full-width text
       const maxW = W - 2 * PADDING
       const line = layoutNextLine(_prepared, cursor, maxW)
       if (line) {
@@ -73,32 +88,50 @@ export function renderTextField(ctx, W, H, state) {
         cursor = line.end
       }
     } else {
-      // Left segment: PADDING → org.minX
-      const leftMaxW = Math.max(0, org.minX - PADDING * 2)
-      if (leftMaxW > charW) {
-        const line = layoutNextLine(_prepared, cursor, leftMaxW)
-        if (line) {
-          ctx.fillText(line.text, PADDING, baseline)
-          cursor = line.end
+      // Sort bounds by minX for proper segment rendering
+      orgBoundsForRow.sort((a, b) => a.minX - b.minX)
+
+      // Render text in segments around organisms
+      let currentX = PADDING
+      for (const org of orgBoundsForRow) {
+        // Left segment before this organism
+        const leftMaxW = Math.max(0, org.minX - currentX)
+        if (leftMaxW > 0) {
+          const line = layoutNextLine(_prepared, cursor, leftMaxW)
+          if (line) {
+            ctx.fillText(line.text, currentX, baseline)
+            cursor = line.end
+          }
         }
+        currentX = org.maxX
       }
 
-      // Right segment: org.maxX → canvas right edge
-      const rightX    = org.maxX + PADDING
-      const rightMaxW = Math.max(0, W - rightX - PADDING)
-      if (rightMaxW > charW) {
+      // Right segment after all organisms
+      const rightMaxW = Math.max(0, W - currentX - PADDING)
+      if (rightMaxW > 0) {
         const line = layoutNextLine(_prepared, cursor, rightMaxW)
         if (line) {
-          ctx.fillText(line.text, rightX, baseline)
+          ctx.fillText(line.text, currentX, baseline)
           cursor = line.end
         }
       }
     }
   }
 
-  // ── Pass 2: outline cells — the parasite IS these characters ─────────────
-  const outlineCells = getOutlineCells(state, charW, lineH, W, H, PADDING, W, H)
-  const flagellumCells = getFlagellumCells(state, charW, lineH, W, H, PADDING, W, H)
+  // ── Pass 2: outline cells — render all parasites ─────────────
+  // Merge outline cells from all organisms
+  const allOutlineCells = new Set()
+  const allFlagellumCells = new Set()
+
+  for (const state of states) {
+    const outlineCells = getOutlineCells(state, charW, lineH, W, H, PADDING, W, H)
+    const flagellumCells = getFlagellumCells(state, charW, lineH, W, H, PADDING, W, H)
+    outlineCells.forEach(cell => allOutlineCells.add(cell))
+    flagellumCells.forEach(cell => allFlagellumCells.add(cell))
+  }
+
+  const outlineCells = allOutlineCells
+  const flagellumCells = allFlagellumCells
 
   ctx.fillStyle  = NEON
   ctx.shadowBlur = 18
@@ -142,21 +175,7 @@ export function renderTextField(ctx, W, H, state) {
     ctx.fillText(CORPUS[charIdx], x, y)
   }
 
-  // ── Pass 3: DAPI-stained organelles rendered as text characters ────────────
-  // Extract organelle positions and canvas dimensions from state
-  const { nucleusX, nucleusY, nucleusRadius,
-          nucleolusX, nucleolusY, nucleolusRadius,
-          kinetoplastX, kinetoplastY, kinetoplastRadius,
-          canvasW, canvasH } = state
-
-  // Wrap organelle positions for seamless toroidal rendering
-  const wrappedNucleusX = ((nucleusX % canvasW) + canvasW) % canvasW
-  const wrappedNucleusY = ((nucleusY % canvasH) + canvasH) % canvasH
-  const wrappedNucleolusX = ((nucleolusX % canvasW) + canvasW) % canvasW
-  const wrappedNucleolusY = ((nucleolusY % canvasH) + canvasH) % canvasH
-  const wrappedKinetoplastX = ((kinetoplastX % canvasW) + canvasW) % canvasW
-  const wrappedKinetoplastY = ((kinetoplastY % canvasH) + canvasH) % canvasH
-
+  // ── Pass 3: DAPI-stained organelles rendered for all organisms ────────────
   ctx.font = _font
   ctx.shadowBlur = 14
   ctx.shadowColor = DAPI_BLUE
@@ -188,11 +207,26 @@ export function renderTextField(ctx, W, H, state) {
     ctx.globalAlpha = 1.0
   }
 
-  // Render organelles (kinetoplast → nucleus → nucleolus for proper layering)
-  // Use wrapped coordinates for seamless toroidal rendering
-  fillOrganelle(wrappedKinetoplastX, wrappedKinetoplastY, kinetoplastRadius, 0.95)
-  fillOrganelle(wrappedNucleusX, wrappedNucleusY, nucleusRadius, 0.85)
-  fillOrganelle(wrappedNucleolusX, wrappedNucleolusY, nucleolusRadius, 1.0)
+  // Render organelles from all organisms
+  for (const state of states) {
+    const { nucleusX, nucleusY, nucleusRadius,
+            nucleolusX, nucleolusY, nucleolusRadius,
+            kinetoplastX, kinetoplastY, kinetoplastRadius,
+            canvasW, canvasH } = state
+
+    // Wrap organelle positions for seamless toroidal rendering
+    const wrappedNucleusX = ((nucleusX % canvasW) + canvasW) % canvasW
+    const wrappedNucleusY = ((nucleusY % canvasH) + canvasH) % canvasH
+    const wrappedNucleolusX = ((nucleolusX % canvasW) + canvasW) % canvasW
+    const wrappedNucleolusY = ((nucleolusY % canvasH) + canvasH) % canvasH
+    const wrappedKinetoplastX = ((kinetoplastX % canvasW) + canvasW) % canvasW
+    const wrappedKinetoplastY = ((kinetoplastY % canvasH) + canvasH) % canvasH
+
+    // Render organelles (kinetoplast → nucleus → nucleolus for proper layering)
+    fillOrganelle(wrappedKinetoplastX, wrappedKinetoplastY, kinetoplastRadius, 0.95)
+    fillOrganelle(wrappedNucleusX, wrappedNucleusY, nucleusRadius, 0.85)
+    fillOrganelle(wrappedNucleolusX, wrappedNucleolusY, nucleolusRadius, 1.0)
+  }
 
   // Reset shadow (avoid bleeding onto overlay HTML)
   ctx.shadowBlur = 0

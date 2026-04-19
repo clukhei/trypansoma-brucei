@@ -31,14 +31,12 @@ function frame(ts) {
   // Create three organisms with different movement paths
   const states = [
     getTrypanosomaState(t, W, H, 0),           // Organism 1
-    getTrypanosomaState(t + 2, W, H, 1.5),    // Organism 2 (time offset + phase shift)
-    getTrypanosomaState(t + 4, W, H, 3.0),    // Organism 3 (time offset + phase shift)
+    getTrypanosomaState(t + 2, W, H, 2.0),    // Organism 2 (time offset + phase shift)
+    getTrypanosomaState(t + 4, W, H, 4.0),    // Organism 3 (time offset + phase shift)
   ]
 
-  // Render all organisms
-  for (const state of states) {
-    renderTextField(ctx, W, H, state)
-  }
+  // Render text once with all organisms overlaid
+  renderTextField(ctx, W, H, states)
 
   requestAnimationFrame(frame)
 }
