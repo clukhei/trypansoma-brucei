@@ -31,29 +31,36 @@ const FLAG_SAMPLES = 220            // sample points for polyline
 const SWIM_SPEED_BASE  = 116        // px / s  (left → right sweep) — BSF T. brucei ~20 µm/s at 5.8 px/µm scale
 const SWIM_AMP_BASE    = 52         // vertical sinusoidal undulation amplitude (px)
 
-// Helper: Calculate scale factor based on canvas width
-// Inverse scaling: smaller screens get larger organisms for better visibility
-function getScaleFactor(canvasW) {
-  return Math.min(REFERENCE_WIDTH / canvasW, 2.5)  // Inverse: smaller screens = larger scale, cap at 2.5x
+// Helper: Calculate size scale factor based on canvas width
+// Normal scaling: smaller screens = smaller organisms
+function getSizeScaleFactor(canvasW) {
+  return Math.min(canvasW / REFERENCE_WIDTH, 1.0)  // Smaller screens = smaller organisms
+}
+
+// Helper: Calculate speed scale factor based on canvas width
+// Inverse scaling: smaller screens = faster movement
+function getSpeedScaleFactor(canvasW) {
+  return Math.max(REFERENCE_WIDTH / canvasW, 1.0)  // Smaller screens = faster speed
 }
 
 // --- Boundary sampling ---
 const ELLIPSE_SAMPLES = 280    // points sampled on cell body outline per frame
 
 export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
-  // Calculate responsive scale factor based on canvas width
-  const scale = getScaleFactor(canvasW)
+  // Calculate responsive scale factors based on canvas width
+  const sizeScale = getSizeScaleFactor(canvasW)
+  const speedScale = getSpeedScaleFactor(canvasW)
 
-  // Scaled organism parameters
-  const BODY_A = BODY_A_BASE * scale
-  const BODY_B = BODY_B_BASE * scale
-  const FLAG_LEN = FLAG_LEN_BASE * scale
-  const WAVE_AMP = WAVE_AMP_BASE * scale
-  const WAVE_LAMBDA = WAVE_LAMBDA_BASE * scale
+  // Scaled organism parameters (size)
+  const BODY_A = BODY_A_BASE * sizeScale
+  const BODY_B = BODY_B_BASE * sizeScale
+  const FLAG_LEN = FLAG_LEN_BASE * sizeScale
+  const WAVE_AMP = WAVE_AMP_BASE * sizeScale
+  const WAVE_LAMBDA = WAVE_LAMBDA_BASE * sizeScale
   const WAVE_K = TWO_PI / WAVE_LAMBDA
   const WAVE_OMEGA = TWO_PI * WAVE_FREQ
-  const SWIM_SPEED = SWIM_SPEED_BASE * scale
-  const SWIM_AMP = SWIM_AMP_BASE * scale
+  const SWIM_SPEED = SWIM_SPEED_BASE * speedScale
+  const SWIM_AMP = SWIM_AMP_BASE * sizeScale
 
   // Immediate seamless wrapping for toroidal viewport
   // Offset each organism to different starting positions based on seed
@@ -64,17 +71,17 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
   const centerY = (canvasH * 0.5 + baseOffsetY) % canvasH
 
   // Forbidden zone: cell cannot penetrate this ellipse
-  const forbiddenRadiusX = 300 * scale  // horizontal radius (scaled)
-  const forbiddenRadiusY = 220 * scale  // vertical radius (scaled)
+  const forbiddenRadiusX = 300 * sizeScale  // horizontal radius (scaled)
+  const forbiddenRadiusY = 220 * sizeScale  // vertical radius (scaled)
 
   // Spiral swimming trajectory with corkscrew motion
   // T. brucei: ~20 µm/s = ~116 px/s (constant velocity)
   const angularVelocity = 0.35  // rad/s
-  const orbitRadius = 360 * scale       // px base orbit radius (scaled)
+  const orbitRadius = 360 * sizeScale       // px base orbit radius (scaled)
   const angle = t * angularVelocity
 
   // Random direction swimming with constant speed and smooth screen wrapping
-  const swimSpeedConstant = 375 * scale  // px/s CONSTANT movement speed (scaled)
+  const swimSpeedConstant = 375 * speedScale  // px/s CONSTANT movement speed (speed-scaled)
 
   // Smooth bounded direction angle with seed-based variation for different paths
   // Different organisms have different movement patterns
@@ -114,8 +121,8 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
   // Posterior end of cell body (flagellum attachment point)
   // Apply body curvature: S-bend creates lateral offset along the body
   const bodyBendAmount = Math.sin(t * 1.2) * 0.45
-  const postX = cx - BODY_A * cosA + bodyBendAmount * 20 * scale * (-sinA)
-  const postY = cy - BODY_A * sinA + bodyBendAmount * 20 * scale * cosA
+  const postX = cx - BODY_A * cosA + bodyBendAmount * 20 * sizeScale * (-sinA)
+  const postY = cy - BODY_A * sinA + bodyBendAmount * 20 * sizeScale * cosA
 
   // Attached flagellum portion: runs along ventral edge of cell body (posterior → anterior)
   const flagPoints = []
@@ -126,7 +133,7 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
     // Apply same S-curve bending as the body
     const bendCurve = Math.sin(Math.PI * t_attach) * Math.sin(t * 1.5) * 0.2
-    const lateralOffset = bendCurve * 15 * scale  // scaled lateral offset
+    const lateralOffset = bendCurve * 15 * sizeScale  // scaled lateral offset
 
     // Interpolate from posterior to anterior along cell body with curve
     const posX = postX + t_attach * (2 * BODY_A) * cosA + lateralOffset * (-sinA)
@@ -151,7 +158,7 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
     // Apply S-curve bending to free portion too
     const bendCurve = Math.sin(t * 1.5) * 0.2
-    const lateralOffset = bendCurve * 15 * scale
+    const lateralOffset = bendCurve * 15 * sizeScale
 
     // Start from posterior and extend backward (trailing behind) with undulation and S-curve
     const baseX = postX - t_free * freeFlagLen * cosA + lateralOffset * (-sinA)
