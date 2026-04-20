@@ -10,27 +10,50 @@
 
 const TWO_PI = Math.PI * 2
 
+// --- Reference dimensions (base scale) ---
+const REFERENCE_WIDTH = 1200   // reference screen width for scaling
+
 // --- Wave parameters (biophysically scaled to screen pixels) ---
-const WAVE_AMP    = 19.5       // A — amplitude (px) [13 × 1.5]
-const WAVE_LAMBDA = 127.5      // λ — wavelength (px) [85 × 1.5]
-const WAVE_FREQ   = 0.85       // f — frequency (Hz); ~20 Hz in vivo, slowed for visibility
-const WAVE_K      = TWO_PI / WAVE_LAMBDA
-const WAVE_OMEGA  = TWO_PI * WAVE_FREQ
+// Base values at reference width
+const WAVE_AMP_BASE    = 19.5       // A — amplitude (px) [13 × 1.5]
+const WAVE_LAMBDA_BASE = 127.5      // λ — wavelength (px) [85 × 1.5]
+const WAVE_FREQ   = 0.85            // f — frequency (Hz); ~20 Hz in vivo, slowed for visibility
 
 // --- Cell body geometry (slender fusiform shape) ---
-const BODY_A      = 130.5      // semi-major axis (half-length along swim axis) [87 × 1.5]
-const BODY_B      = 24         // semi-minor axis (half-width) — more slender [16 × 1.5]
-const FLAG_LEN    = BODY_A * 2.6  // free flagellum length past posterior end
-const FLAG_SAMPLES = 220       // sample points for polyline
+// Base values at reference width
+const BODY_A_BASE      = 130.5      // semi-major axis (half-length along swim axis) [87 × 1.5]
+const BODY_B_BASE      = 24         // semi-minor axis (half-width) — more slender [16 × 1.5]
+const FLAG_LEN_BASE    = BODY_A_BASE * 2.6  // free flagellum length past posterior end
+const FLAG_SAMPLES = 220            // sample points for polyline
 
 // --- Locomotion ---
-const SWIM_SPEED  = 116        // px / s  (left → right sweep) — BSF T. brucei ~20 µm/s at 5.8 px/µm scale
-const SWIM_AMP    = 52         // vertical sinusoidal undulation amplitude (px)
+// Base values at reference width
+const SWIM_SPEED_BASE  = 116        // px / s  (left → right sweep) — BSF T. brucei ~20 µm/s at 5.8 px/µm scale
+const SWIM_AMP_BASE    = 52         // vertical sinusoidal undulation amplitude (px)
+
+// Helper: Calculate scale factor based on canvas width
+function getScaleFactor(canvasW) {
+  return Math.min(canvasW / REFERENCE_WIDTH, 1.0)  // Cap at 1.0 so desktop doesn't get oversized
+}
 
 // --- Boundary sampling ---
 const ELLIPSE_SAMPLES = 280    // points sampled on cell body outline per frame
 
 export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
+  // Calculate responsive scale factor based on canvas width
+  const scale = getScaleFactor(canvasW)
+
+  // Scaled organism parameters
+  const BODY_A = BODY_A_BASE * scale
+  const BODY_B = BODY_B_BASE * scale
+  const FLAG_LEN = FLAG_LEN_BASE * scale
+  const WAVE_AMP = WAVE_AMP_BASE * scale
+  const WAVE_LAMBDA = WAVE_LAMBDA_BASE * scale
+  const WAVE_K = TWO_PI / WAVE_LAMBDA
+  const WAVE_OMEGA = TWO_PI * WAVE_FREQ
+  const SWIM_SPEED = SWIM_SPEED_BASE * scale
+  const SWIM_AMP = SWIM_AMP_BASE * scale
+
   // Immediate seamless wrapping for toroidal viewport
   // Offset each organism to different starting positions based on seed
   const baseOffsetX = (seed % 3) * (canvasW / 3.5)
@@ -40,30 +63,30 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
   const centerY = (canvasH * 0.5 + baseOffsetY) % canvasH
 
   // Forbidden zone: cell cannot penetrate this ellipse
-  const forbiddenRadiusX = 300  // horizontal radius
-  const forbiddenRadiusY = 220  // vertical radius
+  const forbiddenRadiusX = 300 * scale  // horizontal radius (scaled)
+  const forbiddenRadiusY = 220 * scale  // vertical radius (scaled)
 
   // Spiral swimming trajectory with corkscrew motion
   // T. brucei: ~20 µm/s = ~116 px/s (constant velocity)
   const angularVelocity = 0.35  // rad/s
-  const orbitRadius = 360       // px base orbit radius
+  const orbitRadius = 360 * scale       // px base orbit radius (scaled)
   const angle = t * angularVelocity
 
   // Random direction swimming with constant speed and smooth screen wrapping
-  const swimSpeed = 375  // px/s CONSTANT movement speed (half of 750)
+  const swimSpeedConstant = 375 * scale  // px/s CONSTANT movement speed (scaled)
 
   // Smooth bounded direction angle with seed-based variation for different paths
   // Different organisms have different movement patterns
   const directionAngle = Math.sin(t * 0.12 + seed) * 0.5 + Math.cos(t * 0.09 + seed * 0.7) * 0.4
 
   // Constant velocity components (magnitude is always swimSpeed)
-  const vx = Math.cos(directionAngle) * swimSpeed
-  const vy = Math.sin(directionAngle) * swimSpeed
+  const vx = Math.cos(directionAngle) * swimSpeedConstant
+  const vy = Math.sin(directionAngle) * swimSpeedConstant
 
   // Proper position accumulation with bounded direction
   // Integrate velocity properly: position = center + ∫velocity dt
-  const posX = swimSpeed * (Math.sin(t * 0.12) / 0.12 - Math.cos(t * 0.09) / 0.09) / 10
-  const posY = swimSpeed * (-Math.cos(t * 0.12) / 0.12 + Math.sin(t * 0.09) / 0.09) / 10
+  const posX = swimSpeedConstant * (Math.sin(t * 0.12) / 0.12 - Math.cos(t * 0.09) / 0.09) / 10
+  const posY = swimSpeedConstant * (-Math.cos(t * 0.12) / 0.12 + Math.sin(t * 0.09) / 0.09) / 10
 
   // Keep unwrapped position for all calculations
   // Wrapping happens only during rendering for perfect precision
@@ -90,8 +113,8 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
   // Posterior end of cell body (flagellum attachment point)
   // Apply body curvature: S-bend creates lateral offset along the body
   const bodyBendAmount = Math.sin(t * 1.2) * 0.45
-  const postX = cx - BODY_A * cosA + bodyBendAmount * 20 * (-sinA)
-  const postY = cy - BODY_A * sinA + bodyBendAmount * 20 * cosA
+  const postX = cx - BODY_A * cosA + bodyBendAmount * 20 * scale * (-sinA)
+  const postY = cy - BODY_A * sinA + bodyBendAmount * 20 * scale * cosA
 
   // Attached flagellum portion: runs along ventral edge of cell body (posterior → anterior)
   const flagPoints = []
@@ -102,7 +125,7 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
     // Apply same S-curve bending as the body
     const bendCurve = Math.sin(Math.PI * t_attach) * Math.sin(t * 1.5) * 0.2
-    const lateralOffset = bendCurve * 15  // same as body S-curve
+    const lateralOffset = bendCurve * 15 * scale  // scaled lateral offset
 
     // Interpolate from posterior to anterior along cell body with curve
     const posX = postX + t_attach * (2 * BODY_A) * cosA + lateralOffset * (-sinA)
@@ -127,7 +150,7 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
     // Apply S-curve bending to free portion too
     const bendCurve = Math.sin(t * 1.5) * 0.2
-    const lateralOffset = bendCurve * 15
+    const lateralOffset = bendCurve * 15 * scale
 
     // Start from posterior and extend backward (trailing behind) with undulation and S-curve
     const baseX = postX - t_free * freeFlagLen * cosA + lateralOffset * (-sinA)
@@ -140,22 +163,22 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
   }
 
   // --- Nuclear organelles (DAPI-stained) ---
-  // Nucleus: positioned toward anterior, scaled 1.5× with body length
-  const nucleusCenterLocal = 22.5  // pixels toward anterior [15 × 1.5]
+  // Nucleus: positioned toward anterior, scaled with body length
+  const nucleusCenterLocal = 22.5 * scale  // pixels toward anterior (scaled)
   const nucleusX = cx + nucleusCenterLocal * cosA
   const nucleusY = cy + nucleusCenterLocal * sinA
-  const nucleusRadius = 14.625  // [9.75 × 1.5] — 2.52 µm at 5.8 px/µm scale
+  const nucleusRadius = 14.625 * scale  // scaled nucleus radius
 
-  // Nucleolus: inside nucleus, scaled 1.5×
+  // Nucleolus: inside nucleus
   const nucleolusX = nucleusX
   const nucleolusY = nucleusY
-  const nucleolusRadius = 5.625  // [3.75 × 1.5] — ~0.97 µm at 5.8 px/µm scale
+  const nucleolusRadius = 5.625 * scale  // scaled nucleolus radius
 
-  // Kinetoplast (kDNA disc): near posterior end, scaled 1.5×
-  const kinetoplastLocal = -78.75  // pixels toward posterior [-52.5 × 1.5]
+  // Kinetoplast (kDNA disc): near posterior end
+  const kinetoplastLocal = -78.75 * scale  // pixels toward posterior (scaled)
   const kinetoplastX = cx + kinetoplastLocal * cosA
   const kinetoplastY = cy + kinetoplastLocal * sinA
-  const kinetoplastRadius = 3.9375  // [2.625 × 1.5] — 0.68 µm at 5.8 px/µm scale
+  const kinetoplastRadius = 3.9375 * scale  // scaled kinetoplast radius
 
   return { cx, cy, angle, cosA, sinA, a: BODY_A, b: BODY_B, flagPoints, t,
            nucleusX, nucleusY, nucleusRadius,
@@ -166,10 +189,10 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
 // Helper: Get body width at a position along the length (bicone/spindle shape)
 // t=0 is anterior (tapered to point), t=0.5 is widest (middle), t=1 is posterior (tapered to point)
-function getBodyWidthAtLength(t) {
+function getBodyWidthAtLength(t, bodyB = BODY_B_BASE) {
   // Sinusoidal taper: tapers to a point at both ends, full width in middle
   const taper = Math.sin(t * Math.PI)  // 0 → 1 → 0 over the range [0, 1]
-  return BODY_B * taper
+  return bodyB * taper
 }
 
 // Per-row x-extent of the organism (tapered cell body + flagellum).
@@ -178,7 +201,7 @@ function getBodyWidthAtLength(t) {
 //
 // Body shape: asymmetrical taper (blunt anterior, pointed posterior)
 export function getRowBounds(state, lineH, H, padX = 0, padY = 0, W = 800, screenH = 600) {
-  const { cx, cy, cosA, sinA, a, flagPoints, canvasW, canvasH } = state
+  const { cx, cy, cosA, sinA, a, b, flagPoints, canvasW, canvasH } = state
   const rows   = Math.ceil(H / lineH)
   const bounds = new Array(rows).fill(null)
 
@@ -187,7 +210,7 @@ export function getRowBounds(state, lineH, H, padX = 0, padY = 0, W = 800, scree
   const wrappedCy = ((cy % canvasH) + canvasH) % canvasH
 
   // --- Cell body: tapered shape (not a simple ellipse) ---
-  const maxExtent = Math.sqrt((a * sinA) ** 2 + (BODY_B * cosA) ** 2)
+  const maxExtent = Math.sqrt((a * sinA) ** 2 + (b * cosA) ** 2)
 
   for (let row = 0; row < rows; row++) {
     const rowTop = row * lineH
@@ -214,7 +237,7 @@ export function getRowBounds(state, lineH, H, padX = 0, padY = 0, W = 800, scree
       const posX = wrappedCx + (a * (1 - 2*t_pos)) * cosA + lateralOffset * (-sinA)
       const posY = wrappedCy + (a * (1 - 2*t_pos)) * sinA + lateralOffset * cosA
 
-      const width = getBodyWidthAtLength(t_pos)
+      const width = getBodyWidthAtLength(t_pos, b)
 
       // Check if this position is close to our row
       const distY = Math.abs(posY - rowMid)
@@ -278,7 +301,7 @@ export function getFlagellumCells(state, charW, lineH, W, H, padding, screenW = 
 // organism's outline (tapered cell body boundary + flagellum polyline).
 // key encoding: col + row * MAX_COLS  (MAX_COLS = 2000, safe up to 4K)
 export function getOutlineCells(state, charW, lineH, W, H, padding, screenW = 800, screenH = 600) {
-  const { cx, cy, cosA, sinA, a, flagPoints, canvasW, canvasH } = state
+  const { cx, cy, cosA, sinA, a, b, flagPoints, canvasW, canvasH } = state
   const cols = Math.floor((W - 2 * padding) / charW)
   const rows = Math.ceil(H / lineH)
   const cells = new Set()
@@ -300,7 +323,7 @@ export function getOutlineCells(state, charW, lineH, W, H, padding, screenW = 80
     const posX = wrappedCx + (a * (1 - 2*t_pos)) * cosA + lateralOffset * (-sinA)
     const posY = wrappedCy + (a * (1 - 2*t_pos)) * sinA + lateralOffset * cosA
 
-    const width = getBodyWidthAtLength(t_pos)
+    const width = getBodyWidthAtLength(t_pos, b)
 
     // Sample the width perpendicular to swim axis at this position
     for (let widthSample = 0; widthSample < 8; widthSample++) {
