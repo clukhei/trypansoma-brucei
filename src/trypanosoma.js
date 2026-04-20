@@ -32,8 +32,9 @@ const SWIM_SPEED_BASE  = 116        // px / s  (left → right sweep) — BSF T.
 const SWIM_AMP_BASE    = 52         // vertical sinusoidal undulation amplitude (px)
 
 // Helper: Calculate scale factor based on canvas width
+// Inverse scaling: smaller screens get larger organisms for better visibility
 function getScaleFactor(canvasW) {
-  return Math.min(canvasW / REFERENCE_WIDTH, 1.0)  // Cap at 1.0 so desktop doesn't get oversized
+  return Math.min(REFERENCE_WIDTH / canvasW, 2.5)  // Inverse: smaller screens = larger scale, cap at 2.5x
 }
 
 // --- Boundary sampling ---
