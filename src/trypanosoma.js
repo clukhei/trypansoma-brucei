@@ -172,21 +172,21 @@ export function getTrypanosomaState(t, canvasW, canvasH, seed = 0) {
 
   // --- Nuclear organelles (DAPI-stained) ---
   // Nucleus: positioned toward anterior, scaled with body length
-  const nucleusCenterLocal = 22.5 * scale  // pixels toward anterior (scaled)
+  const nucleusCenterLocal = 22.5 * sizeScale  // pixels toward anterior (scaled)
   const nucleusX = cx + nucleusCenterLocal * cosA
   const nucleusY = cy + nucleusCenterLocal * sinA
-  const nucleusRadius = 14.625 * scale  // scaled nucleus radius
+  const nucleusRadius = 14.625 * sizeScale  // scaled nucleus radius
 
   // Nucleolus: inside nucleus
   const nucleolusX = nucleusX
   const nucleolusY = nucleusY
-  const nucleolusRadius = 5.625 * scale  // scaled nucleolus radius
+  const nucleolusRadius = 5.625 * sizeScale  // scaled nucleolus radius
 
   // Kinetoplast (kDNA disc): near posterior end
-  const kinetoplastLocal = -78.75 * scale  // pixels toward posterior (scaled)
+  const kinetoplastLocal = -78.75 * sizeScale  // pixels toward posterior (scaled)
   const kinetoplastX = cx + kinetoplastLocal * cosA
   const kinetoplastY = cy + kinetoplastLocal * sinA
-  const kinetoplastRadius = 3.9375 * scale  // scaled kinetoplast radius
+  const kinetoplastRadius = 3.9375 * sizeScale  // scaled kinetoplast radius
 
   return { cx, cy, angle, cosA, sinA, a: BODY_A, b: BODY_B, flagPoints, t,
            nucleusX, nucleusY, nucleusRadius,
